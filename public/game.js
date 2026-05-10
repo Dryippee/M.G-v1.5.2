@@ -1,6 +1,6 @@
 import * as THREE from "https://unpkg.com/three@0.166.1/build/three.module.js";
 
-const socket = io();
+const socket = io({ transports: ["polling", "websocket"] });
 
 const canvas = document.getElementById("c");
 const lobbyEl = document.getElementById("lobby");
@@ -1253,7 +1253,8 @@ window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
   const k = e.key.toLowerCase();
 
-  if (state.inMatch && k === "escape") {
+  // Pause works in any mode
+  if (state.inMatch && k === "p") {
     e.preventDefault();
     togglePause();
     return;
@@ -1269,7 +1270,6 @@ window.addEventListener("keydown", (e) => {
   if (!state.inMatch) return;
 
   if (_controlsMode === "mobile") {
-    // Only allow essential keys in mobile mode
     if (k === "1") setWeapon("pistol");
     if (k === "2") setWeapon("ak47");
     if (k === "4") { state.buildMode = "wall"; buildModeEl.textContent = state.buildMode; }
@@ -1307,6 +1307,7 @@ window.addEventListener("keyup", (e) => {
   const k = e.key.toLowerCase();
   if (!state.inMatch) return;
   if (_controlsMode === "mobile") return;
+  if (k === "p" || k === "escape") return;
   if (k === "w") state.controls.w = false;
   if (k === "a") state.controls.a = false;
   if (k === "s") state.controls.s = false;
@@ -1385,7 +1386,7 @@ function setControlsMode(mode) {
   btnCtrlMobile?.classList.toggle("active", isMobile);
   const hintEl = document.querySelector(".controls-hint");
   if (hintEl) {
-    hintEl.textContent = isMobile ? "Left stick move · Right side look · Tap to shoot" : "WASD · Click to shoot · F/G build";
+    hintEl.textContent = isMobile ? "Left stick move · Right side look · Tap to shoot" : "WASD · Click to shoot · F/G build · P pause";
   }
   const bi = document.getElementById("buildIndicator");
   if (bi) bi.classList.toggle("mobile", isMobile);
@@ -1683,6 +1684,9 @@ function frame() {
 
   // Fixed-height follow camera: orbits behind player using only yaw.
   // Pitch never affects camera position — avoids gimbal lock.
+  if (!Number.isFinite(state.yaw)) state.yaw = 0;
+  if (!Number.isFinite(state.pitch)) state.pitch = 0;
+
   const pivot = state.smoothFollow.clone();
   pivot.y += 1.4;
   const camDist = 5.0;
@@ -1696,6 +1700,10 @@ function frame() {
 
   const camLerp = 1 - Math.exp(-12 * dt);
   state.camPos.lerp(desired, camLerp);
+
+  if (!Number.isFinite(state.camPos.x)) state.camPos.set(0, 3, -5);
+  if (!Number.isFinite(state.camPos.y)) state.camPos.y = 3;
+  if (!Number.isFinite(state.camPos.z)) state.camPos.z = -5;
 
   camera.position.copy(state.camPos);
   camera.up.set(0, 1, 0);

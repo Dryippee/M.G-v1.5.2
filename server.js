@@ -6,10 +6,12 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: true, methods: ["GET", "POST"] },
+  transports: ["polling", "websocket"], // polling first — some school filters block WebSocket
+  allowEIO3: true,
 });
 
-const PORT_RAW = process.env.PORT ? Number(process.env.PORT) : 3000;
-const PORT = Number.isFinite(PORT_RAW) && PORT_RAW > 0 ? Math.min(65535, Math.floor(PORT_RAW)) : 3000;
+const PORT_RAW = process.env.PORT ? Number(process.env.PORT) : 8080;
+const PORT = Number.isFinite(PORT_RAW) && PORT_RAW > 0 ? Math.min(65535, Math.floor(PORT_RAW)) : 8080;
 const HOST = process.env.HOST || "0.0.0.0";
 
 app.use(express.static("public", { extensions: ["html"] }));
