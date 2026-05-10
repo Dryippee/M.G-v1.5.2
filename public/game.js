@@ -186,8 +186,7 @@ const MOUSE_SENS_X = 0.002;
 const MOUSE_SENS_Y = 0.002;
 const PITCH_LIMIT = Math.PI / 2 - 0.02;
 
-/** Reused for third-person camera orientation (avoid alloc per frame). */
-const _worldUp = new THREE.Vector3(0, 1, 0);
+
 
 function clearMovementControls() {
   state.controls.w = false;
@@ -804,17 +803,19 @@ function computeBuildPlacement() {
   }
 
   // Check floor plane
-  const t = fw.y !== 0 ? -origin.y / fw.y : -1;
-  if (t > 0 && t < bestDist) {
-    const floorPoint = origin.clone().add(fw.clone().multiplyScalar(t));
-    if (Math.abs(floorPoint.x) < 79 && Math.abs(floorPoint.z) < 79) {
-      bestDist = t;
-      bestHit = { type: "floor", point: floorPoint, normal: new THREE.Vector3(0, 1, 0) };
+  if (Math.abs(fw.y) > 0.01) {
+    const t = -origin.y / fw.y;
+    if (t > 0.5 && t < bestDist) {
+      const floorPoint = origin.clone().add(fw.clone().multiplyScalar(t));
+      if (Math.abs(floorPoint.x) < 79 && Math.abs(floorPoint.z) < 79) {
+        bestDist = t;
+        bestHit = { type: "floor", point: floorPoint, normal: new THREE.Vector3(0, 1, 0) };
+      }
     }
   }
 
   if (!bestHit) {
-    // Fallback: place in front of player
+    // Fallback: place in front of player at ground level
     const dist = 3;
     const p = origin.clone().add(fw.clone().multiplyScalar(dist));
     p.y = 0;
@@ -965,28 +966,69 @@ function localForward() {
   return v;
 }
 
-/**
- * Camera orientation from yaw/pitch using quaternions — no gimbal lock.
- * Yaw rotates around world Y, pitch rotates around local right vector.
- */
-const _qYaw = new THREE.Quaternion();
-const _qPitch = new THREE.Quaternion();
-const _pitchAxis = new THREE.Vector3();
-function applyThirdPersonCameraOrientation() {
-  _qYaw.setFromAxisAngle(_worldUp, state.yaw);
-  _pitchAxis.set(1, 0, 0).applyQuaternion(_qYaw);
-  _qPitch.setFromAxisAngle(_pitchAxis, state.pitch);
-  camera.quaternion.copy(_qYaw.multiply(_qPitch));
+/* ==================== BULLET PARTICLES ==================== */
+const _bulletParticles = [];
+function spawnBulletParticles(origin, dir, count = 6) {
+  const color = 0xffdd44;
+  const mat = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 1,
+    depthWrite: false,
+  });
+  for (let i = 0; i < count; i++) {
+    const size = 0.04 + Math.random() * 0.06;
+    const geo = new THREE.SphereGeometry(size, 4, 4);
+    const mesh = new THREE.Mesh(geo, mat.clone());
+    const spread = 0.06;
+    const d = new THREE.Vector3(
+      dir.x + (Math.random() - 0.5) * spread,
+      dir.y + (Math.random() - 0.5) * spread,
+      dir.z + (Math.random() - 0.5) * spread
+    ).normalize();
+    mesh.position.copy(origin).addScaledVector(d, 0.3 + Math.random() * 0.4);
+    const speed = 12 + Math.random() * 8;
+    scene.add(mesh);
+    _bulletParticles.push({ mesh, vel: d.multiplyScalar(speed), life: 0.3 + Math.random() * 0.25, maxLife: 0.3 + Math.random() * 0.25 });
+  }
+}
+
+function updateBulletParticles(dt) {
+  for (let i = _bulletParticles.length - 1; i >= 0; i--) {
+    const p = _bulletParticles[i];
+    p.mesh.position.addScaledVector(p.vel, dt);
+    p.vel.y -= 4 * dt;
+    p.life -= dt;
+    const alpha = Math.max(0, p.life / p.maxLife);
+    p.mesh.material.opacity = alpha;
+    if (p.life <= 0) {
+      scene.remove(p.mesh);
+      p.mesh.geometry.dispose();
+      p.mesh.material.dispose();
+      _bulletParticles.splice(i, 1);
+    }
+  }
 }
 
 function placeBuild() {
-  if (state.paused || !state.buildPreviewValid) return;
+  if (state.paused) return;
   const me = state.players[state.myId];
   if (!me || !me.alive) return;
-  const pos = state.buildPreview.position;
+
+  let px, py, pz;
+  if (state.buildPreview && state.buildPreviewValid) {
+    const p = state.buildPreview.position;
+    px = p.x; py = p.y; pz = p.z;
+  } else {
+    // Fallback: place in front of player
+    const fw = localForward();
+    px = state.position.x + fw.x * 3;
+    py = state.buildMode === "wall" ? 1.4 : 0.15;
+    pz = state.position.z + fw.z * 3;
+  }
   socket.emit("build_place", {
     type: state.buildMode,
-    pos: { x: pos.x, y: pos.y, z: pos.z },
+    pos: { x: px, y: py, z: pz },
     rotY: state.yaw,
   });
 }
@@ -1005,6 +1047,7 @@ function shoot() {
   state.pitch = clampPitch(state.pitch - recoil);
   state.weaponKick = Math.min(0.16, state.weaponKick + (w === "ak47" ? 0.07 : 0.055));
   spawnMuzzleFlash(origin, dir);
+  spawnBulletParticles(origin, dir, w === "ak47" ? 4 : 6);
   socket.emit("shoot", {
     origin: { x: origin.x, y: origin.y, z: origin.z },
     dir: { x: dir.x, y: dir.y, z: dir.z },
@@ -1535,6 +1578,8 @@ function frame() {
     state.weaponRig.rotation.x = state.weaponKick;
   }
 
+  updateBulletParticles(dt);
+
   if (!state.paused) {
     const BASE_MOVE = 9.0;
     const SPRINT_MULT = 1.6;
@@ -1666,9 +1711,7 @@ function frame() {
   }
 
   camera.position.copy(state.camPos);
-
-  camera.up.set(0, 1, 0);
-  applyThirdPersonCameraOrientation();
+  camera.lookAt(pivot);
 
   const me = state.players[state.myId];
   if (me) {
