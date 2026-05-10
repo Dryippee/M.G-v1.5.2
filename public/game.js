@@ -306,7 +306,8 @@ function setPaused(value) {
     state.controls.d = false;
     state.controls.shift = false;
     state.controls.ctrl = false;
-    resetMoveStick();
+    stickReset();
+    resetLookState();
     pauseOverlayEl?.classList.remove("hidden");
     pauseOverlayEl?.setAttribute("aria-hidden", "false");
     updatePauseRoomCode();
@@ -626,7 +627,7 @@ function exitMatchUi({ disconnected } = {}) {
     state.muzzleFlash.mesh.material?.dispose();
   }
   state.muzzleFlash = null;
-  resetMoveStick();
+  stickReset();
   setPaused(false);
   lobbyEl.classList.remove("hidden");
   hudEl.classList.add("hud-hidden");
@@ -1249,16 +1250,16 @@ window.addEventListener("resize", () => {
   renderer.setSize(w, h);
 });
 
+// Dedicated pause listener — works in any mode, separate from game keys
 window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
   const k = e.key.toLowerCase();
+  if (k === "p") { togglePause(); return; }
+});
 
-  // Pause works in any mode
-  if (state.inMatch && k === "p") {
-    e.preventDefault();
-    togglePause();
-    return;
-  }
+window.addEventListener("keydown", (e) => {
+  if (e.repeat) return;
+  const k = e.key.toLowerCase();
 
   if (state.inMatch && k === "l") {
     cycleLighting(1);
@@ -1318,10 +1319,12 @@ window.addEventListener("keyup", (e) => {
 
 window.addEventListener("blur", () => {
   if (state.inMatch) clearMovementControls();
+  resetLookState();
 });
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden" && state.inMatch) clearMovementControls();
+  if (document.visibilityState === "hidden") resetLookState();
 });
 
 document.addEventListener("pointerlockchange", () => {
@@ -1501,6 +1504,11 @@ window.addEventListener("mouseup", (e) => { if (_stickMouseDown) stickReset(); }
 // Look area — touch + mouse drag
 let _lookMouseDown = false;
 
+function resetLookState() {
+  _lookMouseDown = false;
+  state.mobileTouch.lookId = null;
+}
+
 function lookStart(clientX, clientY) {
   _lookMouseDown = true;
   state.mobileTouch.lookX = clientX;
@@ -1512,6 +1520,11 @@ function lookMove(clientX, clientY) {
   if (!_lookMouseDown && state.mobileTouch.lookId === null) return;
   const dx = clientX - state.mobileTouch.lookX;
   const dy = clientY - state.mobileTouch.lookY;
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
+    state.mobileTouch.lookX = clientX;
+    state.mobileTouch.lookY = clientY;
+    return;
+  }
   if (Math.abs(dx) > 4 || Math.abs(dy) > 4) state.mobileTouch.lookDragged = true;
   state.yaw -= dx * MOBILE_SENS;
   state.pitch -= dy * MOBILE_SENS;
@@ -1522,9 +1535,7 @@ function lookMove(clientX, clientY) {
 
 function lookEnd() {
   const isClick = !state.mobileTouch.lookDragged && state.inMatch && !state.paused;
-  const hadTouch = state.mobileTouch.lookId !== null;
-  _lookMouseDown = false;
-  state.mobileTouch.lookId = null;
+  resetLookState();
   if (isClick) shoot();
 }
 
@@ -1548,7 +1559,7 @@ lookAreaEl.addEventListener("touchend", (e) => {
     if (t.identifier === state.mobileTouch.lookId) lookEnd();
   }
 });
-lookAreaEl.addEventListener("touchcancel", () => { state.mobileTouch.lookId = null; });
+lookAreaEl.addEventListener("touchcancel", resetLookState);
 
 // Mouse
 lookAreaEl.addEventListener("mousedown", (e) => { lookStart(e.clientX, e.clientY); });
