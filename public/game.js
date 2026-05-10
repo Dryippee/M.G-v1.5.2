@@ -1394,6 +1394,8 @@ function setControlsMode(mode) {
     state.controls.a = false;
     state.controls.s = false;
     state.controls.d = false;
+    _stickMouseDown = false;
+    _lookMouseDown = false;
   }
   try { sessionStorage.setItem(CONTROLS_MODE_KEY, mode); } catch (_) {}
 }
@@ -1418,139 +1420,139 @@ try {
   if (saved === "mobile" || saved === "pc") setControlsMode(saved);
 } catch (_) {}
 
-// Mobile build mode buttons
+/* ==================== MOBILE CONTROLS (touch + mouse) ==================== */
+
+function mobileClick(el, fn) {
+  el.addEventListener("touchstart", (e) => { e.preventDefault(); fn(); }, { passive: false });
+  el.addEventListener("mousedown", (e) => { fn(); });
+}
+
+// Build mode selector
 mBuildOpts.forEach(el => {
-  el.addEventListener("touchstart", (e) => {
-    e.preventDefault();
+  const setMode = () => {
     state.buildMode = el.dataset.mode;
     mBuildOpts.forEach(o => o.classList.remove("active"));
     el.classList.add("active");
     buildModeEl.textContent = state.buildMode;
-  });
-  el.addEventListener("mousedown", (e) => {
-    if (_controlsMode === "mobile") return;
-    state.buildMode = el.dataset.mode;
-    mBuildOpts.forEach(o => o.classList.remove("active"));
-    el.classList.add("active");
-    buildModeEl.textContent = state.buildMode;
-  });
+  };
+  el.addEventListener("touchstart", (e) => { e.preventDefault(); setMode(); }, { passive: false });
+  el.addEventListener("mousedown", setMode);
 });
 
-// Mobile left stick - movement
-moveStickEl.addEventListener("touchstart", (e) => {
-  e.preventDefault();
-  const t = e.changedTouches[0];
-  state.mobileTouch.moveId = t.identifier;
-  updateMoveStick(t);
-}, { passive: false });
+// Action buttons
+mobileClick(mbtnShoot, shoot);
+mobileClick(mbtnJump, () => { state.jumpRequested = true; });
+mobileClick(mbtnBuild, placeBuild);
+mobileClick(mbtnRemove, tryRemoveBuild);
 
-moveStickEl.addEventListener("touchmove", (e) => {
-  e.preventDefault();
-  for (const t of e.changedTouches) {
-    if (t.identifier === state.mobileTouch.moveId) updateMoveStick(t);
-  }
-}, { passive: false });
-
-moveStickEl.addEventListener("touchend", (e) => {
-  for (const t of e.changedTouches) {
-    if (t.identifier === state.mobileTouch.moveId) {
-      state.mobileTouch.moveId = null;
-      resetMoveStick();
-    }
-  }
-});
-
-moveStickEl.addEventListener("touchcancel", () => {
-  state.mobileTouch.moveId = null;
-  resetMoveStick();
-});
-
-function updateMoveStick(touch) {
+// Left stick — touch + mouse drag
+let _stickMouseDown = false;
+function stickClient(clientX, clientY) {
   const rect = moveStickEl.getBoundingClientRect();
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 2;
-  const dx = touch.clientX - cx;
-  const dy = touch.clientY - cy;
+  const dx = clientX - cx;
+  const dy = clientY - cy;
   const dist = Math.hypot(dx, dy);
   const clamped = Math.min(dist, STICK_RADIUS);
   const angle = Math.atan2(dy, dx);
-  const kx = clamped / STICK_RADIUS;
-  const ky = clamped / STICK_RADIUS;
 
   moveKnobEl.style.left = `calc(50% + ${Math.cos(angle) * clamped}px)`;
   moveKnobEl.style.top = `calc(50% + ${Math.sin(angle) * clamped}px)`;
 
-  let nx = Math.cos(angle) * kx;
-  let nz = Math.sin(angle) * ky;
-
+  const k = clamped / STICK_RADIUS;
+  let nx = Math.cos(angle) * k;
+  let nz = Math.sin(angle) * k;
   if (Math.abs(nx) < STICK_DEAD_ZONE) nx = 0;
   if (Math.abs(nz) < STICK_DEAD_ZONE) nz = 0;
 
-  // Map stick to WASD controls
   state.controls.w = nz < -0.3;
   state.controls.s = nz > 0.3;
   state.controls.a = nx < -0.3;
   state.controls.d = nx > 0.3;
 }
 
-function resetMoveStick() {
+function stickReset() {
   moveKnobEl.style.left = "50%";
   moveKnobEl.style.top = "50%";
   state.controls.w = false;
   state.controls.a = false;
   state.controls.s = false;
   state.controls.d = false;
+  _stickMouseDown = false;
 }
 
-// Mobile look area - camera control
+// Touch
+moveStickEl.addEventListener("touchstart", (e) => { e.preventDefault(); }, { passive: false });
+moveStickEl.addEventListener("touchmove", (e) => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  stickClient(t.clientX, t.clientY);
+}, { passive: false });
+moveStickEl.addEventListener("touchend", (e) => { stickReset(); });
+moveStickEl.addEventListener("touchcancel", stickReset);
+
+// Mouse
+moveStickEl.addEventListener("mousedown", (e) => { _stickMouseDown = true; stickClient(e.clientX, e.clientY); });
+window.addEventListener("mousemove", (e) => { if (_stickMouseDown) stickClient(e.clientX, e.clientY); });
+window.addEventListener("mouseup", (e) => { if (_stickMouseDown) stickReset(); });
+
+// Look area — touch + mouse drag
+let _lookMouseDown = false;
+
+function lookStart(clientX, clientY) {
+  _lookMouseDown = true;
+  state.mobileTouch.lookX = clientX;
+  state.mobileTouch.lookY = clientY;
+  state.mobileTouch.lookDragged = false;
+}
+
+function lookMove(clientX, clientY) {
+  if (!_lookMouseDown && state.mobileTouch.lookId === null) return;
+  const dx = clientX - state.mobileTouch.lookX;
+  const dy = clientY - state.mobileTouch.lookY;
+  if (Math.abs(dx) > 4 || Math.abs(dy) > 4) state.mobileTouch.lookDragged = true;
+  state.yaw -= dx * MOBILE_SENS;
+  state.pitch -= dy * MOBILE_SENS;
+  state.pitch = clampPitch(state.pitch);
+  state.mobileTouch.lookX = clientX;
+  state.mobileTouch.lookY = clientY;
+}
+
+function lookEnd() {
+  const isClick = !state.mobileTouch.lookDragged && state.inMatch && !state.paused;
+  const hadTouch = state.mobileTouch.lookId !== null;
+  _lookMouseDown = false;
+  state.mobileTouch.lookId = null;
+  if (isClick) shoot();
+}
+
+// Touch
 lookAreaEl.addEventListener("touchstart", (e) => {
   e.preventDefault();
   const t = e.changedTouches[0];
   state.mobileTouch.lookId = t.identifier;
-  state.mobileTouch.lookX = t.clientX;
-  state.mobileTouch.lookY = t.clientY;
-  state.mobileTouch.lookDragged = false;
+  lookStart(t.clientX, t.clientY);
 }, { passive: false });
 
 lookAreaEl.addEventListener("touchmove", (e) => {
   e.preventDefault();
   for (const t of e.changedTouches) {
-    if (t.identifier === state.mobileTouch.lookId) {
-      const dx = t.clientX - state.mobileTouch.lookX;
-      const dy = t.clientY - state.mobileTouch.lookY;
-      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) state.mobileTouch.lookDragged = true;
-      state.yaw -= dx * MOBILE_SENS;
-      state.pitch -= dy * MOBILE_SENS;
-      state.pitch = clampPitch(state.pitch);
-      state.mobileTouch.lookX = t.clientX;
-      state.mobileTouch.lookY = t.clientY;
-    }
+    if (t.identifier === state.mobileTouch.lookId) lookMove(t.clientX, t.clientY);
   }
 }, { passive: false });
 
 lookAreaEl.addEventListener("touchend", (e) => {
   for (const t of e.changedTouches) {
-    if (t.identifier === state.mobileTouch.lookId) {
-      state.mobileTouch.lookId = null;
-      // Shoot on quick tap (no drag)
-      if (!state.mobileTouch.lookDragged && state.inMatch && !state.paused) shoot();
-    }
+    if (t.identifier === state.mobileTouch.lookId) lookEnd();
   }
 });
+lookAreaEl.addEventListener("touchcancel", () => { state.mobileTouch.lookId = null; });
 
-lookAreaEl.addEventListener("touchcancel", () => {
-  state.mobileTouch.lookId = null;
-});
-
-// Mobile action buttons
-mbtnShoot.addEventListener("touchstart", (e) => { e.preventDefault(); shoot(); }, { passive: false });
-mbtnJump.addEventListener("touchstart", (e) => { e.preventDefault(); state.jumpRequested = true; }, { passive: false });
-mbtnBuild.addEventListener("touchstart", (e) => { e.preventDefault(); placeBuild(); }, { passive: false });
-mbtnRemove.addEventListener("touchstart", (e) => { e.preventDefault(); tryRemoveBuild(); }, { passive: false });
-mbtnShoot.addEventListener("mousedown", (e) => { if (_controlsMode === "mobile") return; shoot(); });
-mbtnJump.addEventListener("mousedown", (e) => { if (_controlsMode === "mobile") return; state.jumpRequested = true; });
-mbtnBuild.addEventListener("mousedown", (e) => { if (_controlsMode === "mobile") return; placeBuild(); });
-mbtnRemove.addEventListener("mousedown", (e) => { if (_controlsMode === "mobile") return; tryRemoveBuild(); });
+// Mouse
+lookAreaEl.addEventListener("mousedown", (e) => { lookStart(e.clientX, e.clientY); });
+window.addEventListener("mousemove", (e) => { if (_lookMouseDown || state.mobileTouch.lookId !== null) lookMove(e.clientX, e.clientY); });
+window.addEventListener("mouseup", (e) => { if (_lookMouseDown) lookEnd(); });
 
 const CLOCK = new THREE.Clock();
 function frame() {
@@ -1679,20 +1681,18 @@ function frame() {
     state.smoothFollow.lerp(state.position, 1 - Math.exp(-followSpeed * dt));
   }
 
-  // Simple follow camera: behind player in look direction, always looks at player
+  // Fixed-height follow camera: orbits behind player using only yaw.
+  // Pitch never affects camera position — avoids gimbal lock.
   const pivot = state.smoothFollow.clone();
   pivot.y += 1.4;
+  const camDist = 5.0;
+  const camHeight = 2.0;
 
-  const lookDir = new THREE.Vector3(
-    -Math.sin(state.yaw) * Math.cos(state.pitch),
-    Math.sin(state.pitch),
-    -Math.cos(state.yaw) * Math.cos(state.pitch)
+  const desired = new THREE.Vector3(
+    pivot.x - Math.sin(state.yaw) * camDist,
+    pivot.y + camHeight,
+    pivot.z - Math.cos(state.yaw) * camDist
   );
-  if (lookDir.lengthSq() < 1e-8) lookDir.set(0, 0, -1);
-  lookDir.normalize();
-
-  const desired = pivot.clone().add(lookDir.clone().multiplyScalar(-5.0));
-  desired.y = Math.max(pivot.y - 2.0, Math.min(pivot.y + 4.0, desired.y));
 
   const camLerp = 1 - Math.exp(-12 * dt);
   state.camPos.lerp(desired, camLerp);
