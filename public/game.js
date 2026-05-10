@@ -956,9 +956,9 @@ function updateHud() {
 function localForward() {
   const cp = Math.cos(state.pitch);
   const v = new THREE.Vector3(
-    Math.sin(state.yaw) * cp,
+    -Math.sin(state.yaw) * cp,
     Math.sin(state.pitch),
-    Math.cos(state.yaw) * cp
+    -Math.cos(state.yaw) * cp
   ).normalize();
   if (!Number.isFinite(v.x) || !Number.isFinite(v.y) || !Number.isFinite(v.z) || v.lengthSq() < 1e-12) {
     v.set(0, 0, -1);
@@ -1600,7 +1600,7 @@ function frame() {
     state.crouchHeight = state.crouchHeight || 1.0;
     state.crouchHeight += (targetHeight - state.crouchHeight) * Math.min(1, 12 * dt);
 
-    const forward = new THREE.Vector3(Math.sin(state.yaw), 0, Math.cos(state.yaw)).normalize();
+    const forward = new THREE.Vector3(-Math.sin(state.yaw), 0, -Math.cos(state.yaw)).normalize();
     const right = new THREE.Vector3(forward.z, 0, -forward.x);
     const input = new THREE.Vector3();
     if (state.controls.w) input.add(forward);
@@ -1679,38 +1679,26 @@ function frame() {
     state.smoothFollow.lerp(state.position, 1 - Math.exp(-followSpeed * dt));
   }
 
-  const pivotY = 0.6 + (state.crouchHeight ?? 1.0) * 0.92;
-  const pivot = state.smoothFollow.clone().add(new THREE.Vector3(0, pivotY, 0));
-  const back = new THREE.Vector3(
+  // Simple follow camera: behind player in look direction, always looks at player
+  const pivot = state.smoothFollow.clone();
+  pivot.y += 1.4;
+
+  const lookDir = new THREE.Vector3(
     -Math.sin(state.yaw) * Math.cos(state.pitch),
-    -Math.sin(state.pitch),
+    Math.sin(state.pitch),
     -Math.cos(state.yaw) * Math.cos(state.pitch)
-  ).normalize();
-  const rightCam = new THREE.Vector3(Math.cos(state.yaw), 0, -Math.sin(state.yaw));
-  const camDist = 5.35;
-  const shoulder = 0.66;
-  const desiredCam = pivot
-    .clone()
-    .add(back.clone().multiplyScalar(camDist))
-    .add(rightCam.multiplyScalar(shoulder));
+  );
+  if (lookDir.lengthSq() < 1e-8) lookDir.set(0, 0, -1);
+  lookDir.normalize();
 
-  // Improved camera clipping with better bounds checking
-  const camOrigin = pivot.clone().add(new THREE.Vector3(0, 0.18, 0));
-  const clipped = clipCameraThroughBuilds(camOrigin, desiredCam, state.builds, 0.52);
+  const desired = pivot.clone().add(lookDir.clone().multiplyScalar(-5.0));
+  desired.y = Math.max(pivot.y - 2.0, Math.min(pivot.y + 4.0, desired.y));
 
-  // Smoother camera interpolation with velocity-based damping
-  const camLerp = state.grounded ? 1 - Math.exp(-11 * dt) : 1 - Math.exp(-8 * dt);
-  state.camPos.lerp(clipped, camLerp);
-
-  // Ensure camera doesn't get too close to player
-  const toPlayer = state.camPos.clone().sub(pivot);
-  const minDist = 2.0;
-  if (toPlayer.lengthSq() < minDist * minDist) {
-    toPlayer.normalize().multiplyScalar(minDist);
-    state.camPos.copy(pivot).add(toPlayer);
-  }
+  const camLerp = 1 - Math.exp(-12 * dt);
+  state.camPos.lerp(desired, camLerp);
 
   camera.position.copy(state.camPos);
+  camera.up.set(0, 1, 0);
   camera.lookAt(pivot);
 
   const me = state.players[state.myId];
