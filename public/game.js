@@ -664,6 +664,19 @@ function applyTeamColorToGroup(group, team) {
   group.userData.team = team;
 }
 
+function storePartDefaults(parts) {
+  for (const p of parts) {
+    if (p.isMesh) {
+      p.userData.dpx = p.position.x;
+      p.userData.dpy = p.position.y;
+      p.userData.dpz = p.position.z;
+      p.userData.drx = p.rotation.x;
+      p.userData.dry = p.rotation.y;
+      p.userData.drz = p.rotation.z;
+    }
+  }
+}
+
 function createHumanoidGroup(team) {
   const group = new THREE.Group();
   group.userData.kind = "humanoid";
@@ -674,27 +687,43 @@ function createHumanoidGroup(team) {
     metalness: 0.06,
   });
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 14, 12), mat);
+  // 1v1.lol-style blocky character
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, 0.28), mat);
+  head.name = "head";
   head.position.set(0, 0.74, 0);
   group.add(head);
 
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.4, 0.19), mat);
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.4, 0.2), mat);
+  torso.name = "torso";
   torso.position.set(0, 0.4, 0);
   group.add(torso);
 
-  const armGeo = new THREE.BoxGeometry(0.1, 0.34, 0.1);
+  const armGeo = new THREE.BoxGeometry(0.12, 0.34, 0.12);
   const armL = new THREE.Mesh(armGeo, mat);
-  armL.position.set(-0.26, 0.42, 0);
+  armL.name = "armL";
+  armL.position.set(-0.28, 0.42, 0);
   const armR = new THREE.Mesh(armGeo, mat);
-  armR.position.set(0.26, 0.42, 0);
+  armR.name = "armR";
+  armR.position.set(0.28, 0.42, 0);
   group.add(armL, armR);
 
-  const legGeo = new THREE.BoxGeometry(0.13, 0.38, 0.13);
+  const legGeo = new THREE.BoxGeometry(0.14, 0.38, 0.14);
   const legL = new THREE.Mesh(legGeo, mat);
-  legL.position.set(-0.09, 0.19, 0);
+  legL.name = "legL";
+  legL.position.set(-0.1, 0.19, 0);
   const legR = new THREE.Mesh(legGeo, mat);
-  legR.position.set(0.09, 0.19, 0);
+  legR.name = "legR";
+  legR.position.set(0.1, 0.19, 0);
   group.add(legL, legR);
+
+  // Attach both weapon types (swap visibility in animatePlayer)
+  const weaponPistol = buildWeaponOnCharacter("pistol");
+  weaponPistol.name = "weaponPistol";
+  weaponPistol.visible = true;
+  const weaponAk = buildWeaponOnCharacter("ak47");
+  weaponAk.name = "weaponAk";
+  weaponAk.visible = false;
+  group.add(weaponPistol, weaponAk);
 
   const hitMat = mat.clone();
   hitMat.visible = false;
@@ -703,7 +732,53 @@ function createHumanoidGroup(team) {
   hitCapsule.name = "hitProxy";
   group.add(hitCapsule);
 
+  storePartDefaults([head, torso, armL, armR, legL, legR]);
   return group;
+}
+
+function buildWeaponOnCharacter(type) {
+  const gunMetal = new THREE.MeshStandardMaterial({ color: 0x3a4355, metalness: 0.32, roughness: 0.48 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x5c3d2e, roughness: 0.88, metalness: 0.04 });
+  const accent = new THREE.MeshStandardMaterial({ color: 0x4a5c6b, metalness: 0.22, roughness: 0.52 });
+  const g = new THREE.Group();
+  if (type === "ak47") {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.5), gunMetal);
+    body.position.set(0, 0, -0.2);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.3, 6), accent);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 0.035, -0.54);
+    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.16, 0.08), wood);
+    mag.position.set(0, -0.1, -0.02);
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.08, 0.2), wood);
+    stock.position.set(0, 0.015, 0.24);
+    g.add(body, barrel, mag, stock);
+  } else {
+    // Low-poly Glock
+    const slide = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.18), gunMetal);
+    slide.position.set(0, 0.02, -0.02);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.018, 0.04, 6), accent);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 0.01, -0.12);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.09), wood);
+    grip.position.set(0, -0.06, 0.03);
+    grip.rotation.x = 0.1;
+    const triggerGuard = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.05), accent);
+    triggerGuard.position.set(0, -0.02, 0.05);
+    const sightF = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.015, 0.01), accent);
+    sightF.position.set(0, 0.055, -0.06);
+    const sightR = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.02, 0.01), accent);
+    sightR.position.set(0, 0.06, 0.04);
+    g.add(slide, barrel, grip, triggerGuard, sightF, sightR);
+  }
+  return g;
+}
+
+function applyTeamColorToGroup(group, team) {
+  const hex = playerColor(team);
+  group.traverse((o) => {
+    if (o.isMesh && o.material?.color && o.name !== "hitProxy") o.material.color.setHex(hex);
+  });
+  group.userData.team = team;
 }
 
 function ensurePlayerMesh(id, player) {
@@ -871,10 +946,8 @@ function updateBuildPreview() {
 
     if (state.buildMode === "wall") {
       pos = { x: sx, y: snapCoord(Math.max(sy, 0.6), 0.6), z: sz };
-    } else if (state.buildMode === "floor") {
-      pos = { x: sx, y: snapCoord(Math.max(sy, 0.05), 0.2), z: sz };
     } else {
-      pos = { x: sx, y: snapCoord(Math.max(sy, 0.05), 0.2), z: sz };
+      pos = { x: sx, y: snapCoord(Math.max(sy, 0.15), 0.2), z: sz };
     }
 
     // Clamp to valid range
@@ -967,46 +1040,62 @@ function localForward() {
   return v;
 }
 
-/* ==================== BULLET PARTICLES ==================== */
-const _bulletParticles = [];
-function spawnBulletParticles(origin, dir, count = 6) {
-  const color = 0xffdd44;
-  const mat = new THREE.MeshBasicMaterial({
-    color,
-    transparent: true,
-    opacity: 1,
-    depthWrite: false,
-  });
-  for (let i = 0; i < count; i++) {
-    const size = 0.04 + Math.random() * 0.06;
-    const geo = new THREE.SphereGeometry(size, 4, 4);
-    const mesh = new THREE.Mesh(geo, mat.clone());
-    const spread = 0.06;
-    const d = new THREE.Vector3(
-      dir.x + (Math.random() - 0.5) * spread,
-      dir.y + (Math.random() - 0.5) * spread,
-      dir.z + (Math.random() - 0.5) * spread
-    ).normalize();
-    mesh.position.copy(origin).addScaledVector(d, 0.3 + Math.random() * 0.4);
-    const speed = 12 + Math.random() * 8;
-    scene.add(mesh);
-    _bulletParticles.push({ mesh, vel: d.multiplyScalar(speed), life: 0.3 + Math.random() * 0.25, maxLife: 0.3 + Math.random() * 0.25 });
+/* ==================== BULLET PROJECTILES ==================== */
+const _bulletPool = [];
+function spawnBullet(origin, dir, weapon) {
+  const isAk = weapon === "ak47";
+  const size = isAk ? 0.15 : 0.12;
+  const geo = new THREE.SphereGeometry(size, 8, 8);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffdd44, transparent: true, opacity: 1, depthWrite: false });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(origin).addScaledVector(dir, 0.5);
+  scene.add(mesh);
+  // Trail particles
+  const trailCount = isAk ? 3 : 2;
+  const trails = [];
+  for (let i = 0; i < trailCount; i++) {
+    const tSize = 0.04 + Math.random() * 0.04;
+    const tGeo = new THREE.SphereGeometry(tSize, 4, 4);
+    const tMat = new THREE.MeshBasicMaterial({ color: 0xffaa22, transparent: true, opacity: 0.6, depthWrite: false });
+    const tMesh = new THREE.Mesh(tGeo, tMat);
+    scene.add(tMesh);
+    trails.push({ mesh: tMesh, life: 0.25 + Math.random() * 0.15, maxLife: 0.25 + Math.random() * 0.15 });
   }
+  const speed = isAk ? 45 : 35;
+  _bulletPool.push({ mesh, vel: dir.clone().multiplyScalar(speed), trails, life: 0, spawnPos: mesh.position.clone(), isAk });
 }
 
-function updateBulletParticles(dt) {
-  for (let i = _bulletParticles.length - 1; i >= 0; i--) {
-    const p = _bulletParticles[i];
-    p.mesh.position.addScaledVector(p.vel, dt);
-    p.vel.y -= 4 * dt;
-    p.life -= dt;
-    const alpha = Math.max(0, p.life / p.maxLife);
-    p.mesh.material.opacity = alpha;
-    if (p.life <= 0) {
-      scene.remove(p.mesh);
-      p.mesh.geometry.dispose();
-      p.mesh.material.dispose();
-      _bulletParticles.splice(i, 1);
+function updateBullets(dt) {
+  for (let i = _bulletPool.length - 1; i >= 0; i--) {
+    const b = _bulletPool[i];
+    b.life += dt;
+    const dist = b.mesh.position.distanceTo(b.spawnPos);
+    const maxDist = b.isAk ? 25 : 20;
+    const maxLife = 0.8;
+    if (b.life > maxLife || dist > maxDist) {
+      scene.remove(b.mesh);
+      b.mesh.geometry.dispose();
+      b.mesh.material.dispose();
+      for (const t of b.trails) {
+        scene.remove(t.mesh);
+        t.mesh.geometry.dispose();
+        t.mesh.material.dispose();
+      }
+      _bulletPool.splice(i, 1);
+      continue;
+    }
+    b.mesh.position.addScaledVector(b.vel, dt);
+    // Update trail positions to follow behind the bullet
+    const trailStart = b.mesh.position.clone().sub(b.vel.clone().normalize().multiplyScalar(0.3));
+    for (let ti = 0; ti < b.trails.length; ti++) {
+      const t = b.trails[ti];
+      t.mesh.position.lerpVectors(trailStart, t.mesh.position, 0.3);
+      t.life -= dt;
+      if (t.life <= 0) {
+        t.mesh.position.copy(trailStart);
+        t.life = t.maxLife;
+      }
+      t.mesh.material.opacity = Math.min(0.6, t.life / t.maxLife * 0.6);
     }
   }
 }
@@ -1048,7 +1137,7 @@ function shoot() {
   state.pitch = clampPitch(state.pitch - recoil);
   state.weaponKick = Math.min(0.16, state.weaponKick + (w === "ak47" ? 0.07 : 0.055));
   spawnMuzzleFlash(origin, dir);
-  spawnBulletParticles(origin, dir, w === "ak47" ? 4 : 6);
+  spawnBullet(origin, dir, w);
   socket.emit("shoot", {
     origin: { x: origin.x, y: origin.y, z: origin.z },
     dir: { x: dir.x, y: dir.y, z: dir.z },
@@ -1387,6 +1476,8 @@ function setControlsMode(mode) {
   mobileEl?.classList.toggle("hidden", !isMobile);
   btnCtrlPC?.classList.toggle("active", !isMobile);
   btnCtrlMobile?.classList.toggle("active", isMobile);
+  resetLookState();
+  _stickMouseDown = false;
   const hintEl = document.querySelector(".controls-hint");
   if (hintEl) {
     hintEl.textContent = isMobile ? "Left stick move · Right side look · Tap to shoot" : "WASD · Click to shoot · F/G build · P pause";
@@ -1399,7 +1490,7 @@ function setControlsMode(mode) {
     state.controls.s = false;
     state.controls.d = false;
     _stickMouseDown = false;
-    _lookMouseDown = false;
+    resetLookState();
   }
   try { sessionStorage.setItem(CONTROLS_MODE_KEY, mode); } catch (_) {}
 }
@@ -1562,9 +1653,90 @@ lookAreaEl.addEventListener("touchend", (e) => {
 lookAreaEl.addEventListener("touchcancel", resetLookState);
 
 // Mouse
-lookAreaEl.addEventListener("mousedown", (e) => { lookStart(e.clientX, e.clientY); });
-window.addEventListener("mousemove", (e) => { if (_lookMouseDown || state.mobileTouch.lookId !== null) lookMove(e.clientX, e.clientY); });
+lookAreaEl.addEventListener("mousedown", (e) => { if (e.button !== 0) return; lookStart(e.clientX, e.clientY); });
+lookAreaEl.addEventListener("contextmenu", (e) => { e.preventDefault(); });
+window.addEventListener("mousemove", (e) => { if ((_lookMouseDown || state.mobileTouch.lookId !== null) && _controlsMode === "mobile") lookMove(e.clientX, e.clientY); });
 window.addEventListener("mouseup", (e) => { if (_lookMouseDown) lookEnd(); });
+window.addEventListener("contextmenu", (e) => { if (_lookMouseDown) { e.preventDefault(); lookEnd(); } });
+
+// ==================== PLAYER ANIMATION ====================
+let _animTime = 0;
+
+function animatePlayer(group, st, dt) {
+  const head = group.getObjectByName("head");
+  const torso = group.getObjectByName("torso");
+  const armL = group.getObjectByName("armL");
+  const armR = group.getObjectByName("armR");
+  const legL = group.getObjectByName("legL");
+  const legR = group.getObjectByName("legR");
+  const wp = group.getObjectByName("weaponPistol");
+  const wa = group.getObjectByName("weaponAk");
+  if (!head) return;
+
+  const hasInput = st.controls.w || st.controls.a || st.controls.s || st.controls.d;
+  const sprinting = st.controls.shift && hasInput && !st.controls.ctrl;
+  const crouching = st.controls.ctrl;
+  const grounded = st.grounded;
+  const hspd = Math.sqrt(st.velocity.x * st.velocity.x + st.velocity.z * st.velocity.z);
+
+  // Reset to defaults
+  head.position.set(head.userData.dpx ?? 0, head.userData.dpy ?? 0.74, head.userData.dpz ?? 0);
+  head.rotation.set(0, 0, 0);
+  torso.position.set(torso.userData.dpx ?? 0, torso.userData.dpy ?? 0.4, torso.userData.dpz ?? 0);
+  torso.rotation.set(0, 0, 0);
+  armL.position.set(armL.userData.dpx ?? -0.26, armL.userData.dpy ?? 0.42, armL.userData.dpz ?? 0);
+  armL.rotation.set(0, 0, 0);
+  armR.position.set(armR.userData.dpx ?? 0.26, armR.userData.dpy ?? 0.42, armR.userData.dpz ?? 0);
+  armR.rotation.set(0, 0, 0);
+  legL.position.set(legL.userData.dpx ?? -0.09, legL.userData.dpy ?? 0.19, legL.userData.dpz ?? 0);
+  legL.rotation.set(0, 0, 0);
+  legR.position.set(legR.userData.dpx ?? 0.09, legR.userData.dpy ?? 0.19, legR.userData.dpz ?? 0);
+  legR.rotation.set(0, 0, 0);
+
+  if (hasInput && grounded) _animTime += dt * (sprinting ? 12 : 8) * Math.min(1, hspd / 3);
+
+  // Crouch
+  if (crouching) {
+    const o = 0.12;
+    head.position.y -= o; torso.position.y -= o;
+    armL.position.y -= o; armR.position.y -= o;
+    legL.position.y += 0.05; legR.position.y += 0.05;
+  }
+
+  // Walk / run
+  if (hasInput && grounded) {
+    const a = sprinting ? 0.55 : 0.35;
+    const s = Math.sin(_animTime);
+    legL.rotation.x = s * a; legR.rotation.x = -s * a;
+    armL.rotation.x = -s * a * 0.5; armR.rotation.x = s * a * 0.5;
+    if (sprinting) { torso.rotation.x = -0.1; head.position.y += 0.03; }
+  }
+
+  // Jump
+  if (!grounded) {
+    legL.rotation.x = -0.4; legR.rotation.x = -0.4;
+    armL.rotation.x = -0.6; armR.rotation.x = -0.3;
+  }
+
+  // Shoot recoil
+  if (st.weaponKick > 0.001) armR.rotation.x -= st.weaponKick * 3;
+
+  // Weapon
+  const isAk = st.weapon === "ak47";
+  if (wp) wp.visible = !isAk;
+  if (wa) wa.visible = isAk;
+  const weapon = isAk ? wa : wp;
+  if (weapon) {
+    const wy = crouching ? 0.25 : 0.35;
+    weapon.position.set(0.3, wy, -0.15);
+    weapon.rotation.x = armR.rotation.x;
+    weapon.rotation.z = -0.15;
+    if (st.weaponKick > 0.001) {
+      weapon.position.z += st.weaponKick * 2;
+      weapon.rotation.x += st.weaponKick * 4;
+    }
+  }
+}
 
 const CLOCK = new THREE.Clock();
 function frame() {
@@ -1589,10 +1761,10 @@ function frame() {
 
   if (state.weaponRig) {
     state.weaponKick *= Math.exp(-17 * dt);
-    state.weaponRig.rotation.x = state.weaponKick;
+    state.weaponRig.visible = false;
   }
 
-  updateBulletParticles(dt);
+  updateBullets(dt);
 
   if (!state.paused) {
     const BASE_MOVE = 9.0;
@@ -1617,8 +1789,8 @@ function frame() {
     const forward = new THREE.Vector3(-Math.sin(state.yaw), 0, -Math.cos(state.yaw)).normalize();
     const right = new THREE.Vector3(forward.z, 0, -forward.x);
     const input = new THREE.Vector3();
-    if (state.controls.w) input.add(forward);
-    if (state.controls.s) input.sub(forward);
+    if (state.controls.s) input.add(forward);
+    if (state.controls.w) input.sub(forward);
     if (state.controls.a) input.sub(right);
     if (state.controls.d) input.add(right);
     const hasInput = input.lengthSq() > 0;
@@ -1697,6 +1869,9 @@ function frame() {
   // Pitch never affects camera position — avoids gimbal lock.
   if (!Number.isFinite(state.yaw)) state.yaw = 0;
   if (!Number.isFinite(state.pitch)) state.pitch = 0;
+  if (!Number.isFinite(state.smoothFollow.x)) state.smoothFollow.x = 0;
+  if (!Number.isFinite(state.smoothFollow.y)) state.smoothFollow.y = 1.4;
+  if (!Number.isFinite(state.smoothFollow.z)) state.smoothFollow.z = 0;
 
   const pivot = state.smoothFollow.clone();
   pivot.y += 1.4;
@@ -1728,7 +1903,9 @@ function frame() {
       me.yaw = state.yaw;
       me.pitch = state.pitch;
     }
-    ensurePlayerMesh(state.myId, me).visible = false; // hide local body in third-person
+    ensurePlayerMesh(state.myId, me);
+    const myMesh = state.meshes.get(state.myId);
+    if (myMesh) animatePlayer(myMesh, state, dt);
   }
 
   if (state.inMatch && socket.connected && state.myId && !state.paused && now - state.lastNetSend > 45) {
