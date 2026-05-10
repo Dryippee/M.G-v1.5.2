@@ -1,6 +1,6 @@
 import * as THREE from "https://unpkg.com/three@0.166.1/build/three.module.js";
 
-const socket = io({ transports: ["polling", "websocket"] });
+const socket = io();
 
 const canvas = document.getElementById("c");
 const lobbyEl = document.getElementById("lobby");
