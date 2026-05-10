@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Arena 1v1 — build &amp; shoot</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div id="lobby" class="lobby">
+      <div class="lobby-card">
+        <div class="lobby-title">Arena 1v1 (browser)</div>
+        <p class="lobby-sub">
+          Original primitives only — not affiliated with any commercial arena game. Use Quick Match for auto-pairing or share a room code with a friend.
+        </p>
+        <div class="lobby-actions">
+          <button type="button" id="btnQuick" class="btn primary">Quick match (1v1)</button>
+          <button type="button" id="btnCreate" class="btn">Create room</button>
+        </div>
+        <div class="lobby-row">
+          <input id="roomCodeInput" class="input" maxlength="8" placeholder="Room code" autocomplete="off" />
+          <button type="button" id="btnJoin" class="btn">Join</button>
+        </div>
+        <button type="button" id="btnCancelQueue" class="btn ghost hidden">Leave queue</button>
+        <div id="lobbyStatus" class="lobby-status">Connect to server…</div>
+        <div id="hostCode" class="host-code hidden"></div>
+      </div>
+    </div>
+
+    <div id="hud" class="hud-hidden">
+      <div class="top-bar">
+        <div class="top-left">
+          <div id="roomPill" class="pill-sm">Room: —</div>
+          <div id="you" class="pill-sm">You: —</div>
+          <div id="teams" class="pill-sm">Teams: —</div>
+          <div id="score" class="pill-sm">Score: —</div>
+        </div>
+        <div class="top-right">
+          <div id="status" class="pill-sm">Connected</div>
+        </div>
+      </div>
+
+      <div id="buildIndicator" class="build-indicator">
+        <span class="build-label">Build:</span>
+        <span class="build-type" id="buildModeDisplay">wall</span>
+        <span class="build-hint">[4/5/6]</span>
+      </div>
+
+      <div class="play-hud" id="playHud">
+        <div class="play-hud-left">
+          <div class="hp-row" aria-label="Health">
+            <div class="hp-icon">❤️</div>
+            <div class="hp-bar"><div class="hp-fill" id="hpFill"></div></div>
+            <div class="hp-num" id="hpNum">100</div>
+          </div>
+          <div class="kills-row">
+            <span class="kills-icon">⚔</span>
+            <strong id="killsNum">0</strong>
+            <span class="kills-label">kills</span>
+          </div>
+        </div>
+        <div class="play-hud-right">
+          <div class="weapon-box" id="weaponBox">
+            <div class="weapon-name" id="weaponName">Pistol</div>
+            <div class="weapon-ammo" id="ammoReadout">Ready</div>
+          </div>
+          <div class="controls-hint">WASD · Click to shoot · F/G build</div>
+        </div>
+      </div>
+
+      <div id="center">
+        <div id="crosshair"></div>
+      </div>
+      <div id="toast"></div>
+    </div>
+
+    <!-- Mobile touch controls (hidden by default) -->
+    <div id="mobileControls" class="mobile-controls hidden">
+      <div id="mobileMoveStick" class="mobile-stick-zone">
+        <div class="mobile-stick-base">
+          <div class="mobile-stick-knob" id="moveKnob"></div>
+        </div>
+      </div>
+      <div id="mobileLookArea" class="mobile-look-area"></div>
+      <div class="mobile-actions">
+        <button class="mobile-btn mobile-btn-jump" id="mbtnJump">Jump</button>
+        <button class="mobile-btn mobile-btn-build" id="mbtnBuild">Build</button>
+        <button class="mobile-btn mobile-btn-build" id="mbtnRemove" style="border-color:rgba(239,68,68,0.4);background:rgba(239,68,68,0.2)">Remove</button>
+        <button class="mobile-btn mobile-btn-shoot" id="mbtnShoot">Fire</button>
+      </div>
+      <div class="mobile-build-select">
+        <button class="m-build-opt" data-mode="wall">Wall</button>
+        <button class="m-build-opt" data-mode="ramp">Ramp</button>
+        <button class="m-build-opt" data-mode="floor">Floor</button>
+      </div>
+    </div>
+
+    <div id="pauseOverlay" class="pause-overlay hidden" aria-hidden="true">
+      <div class="pause-card">
+        <div class="pause-tabs">
+          <button class="pause-tab active" data-tab="game">Game</button>
+          <button class="pause-tab" data-tab="controls">Controls</button>
+        </div>
+        <div class="pause-tab-content" id="pauseTabGame">
+          <div id="pauseRoomCode" class="pause-room-code" aria-live="polite">Room: —</div>
+          <div class="pause-title">Paused</div>
+          <p class="pause-note">
+            Local pause only — the match keeps running; you stay in sync via snapshots until you resume.
+          </p>
+          <div class="pause-actions pause-actions-main">
+            <button type="button" id="btnResume" class="btn primary">Resume game</button>
+            <button type="button" id="btnLeaveGame" class="btn danger">Leave game</button>
+          </div>
+          <p class="pause-hint">Lighting: <span class="k">L</span> in-game, or use below.</p>
+          <div class="pause-light-row">
+            <button type="button" id="btnLightPrev" class="btn">◀ Lighting</button>
+            <span id="pauseLightLabel" class="pill pause-light-label">Day</span>
+            <button type="button" id="btnLightNext" class="btn">Lighting ▶</button>
+          </div>
+        </div>
+        <div class="pause-tab-content hidden" id="pauseTabControls">
+          <div class="pause-title">Controls</div>
+          <p class="pause-note">Switch between PC keyboard+mouse and mobile touch controls.</p>
+          <div class="control-toggle-row">
+            <span class="control-label">Control mode</span>
+            <div class="toggle-group">
+              <button type="button" id="btnCtrlPC" class="btn toggle-btn active">PC</button>
+              <button type="button" id="btnCtrlMobile" class="btn toggle-btn">Mobile</button>
+            </div>
+          </div>
+          <div class="pause-hint" style="margin-top:12px">
+            <span class="k">PC:</span> WASD move, mouse look, click shoot, 1/2 weapons, 4/5/6 build, F place, G remove<br/>
+            <span class="k">Mobile:</span> Left stick move, right side look, tap Fire to shoot, Jump to jump
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <canvas id="c"></canvas>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="module" src="/game.js"></script>
+  </body>
+</html>
+
