@@ -6,6 +6,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: true, methods: ["GET", "POST"] },
+  transports: ["polling", "websocket"],
 });
 
 const PORT_RAW = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -727,5 +728,6 @@ setInterval(() => {
 }, TICK_MS);
 
 server.listen(PORT, HOST, () => {
-  console.log(`Server listening on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT} (bind ${HOST})`);
+  const url = `http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`;
+  console.log(`\n  🎮 Arena 1v1 running at: ${url}\n`);
 });

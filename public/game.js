@@ -1,6 +1,6 @@
 import * as THREE from "https://unpkg.com/three@0.166.1/build/three.module.js";
 
-const socket = io();
+const socket = io({ transports: ["polling", "websocket"] });
 
 const canvas = document.getElementById("c");
 const lobbyEl = document.getElementById("lobby");
@@ -1164,20 +1164,28 @@ function tryRemoveBuild() {
   socket.emit("build_remove", { id: hit.object.userData.buildId });
 }
 
+function lobbyEmit(event, payload) {
+  if (!socket.connected) {
+    lobbyStatusEl.textContent = "Not connected to server — please wait…";
+    return;
+  }
+  socket.emit(event, payload);
+}
+
 btnQuick.addEventListener("click", () => {
   lobbyStatusEl.textContent = "Finding an opponent…";
-  socket.emit("lobby:quick");
+  lobbyEmit("lobby:quick");
 });
 
 btnCreate.addEventListener("click", () => {
-  lobbyStatusEl.textContent = "Creating room…";
   hostCodeEl.classList.add("hidden");
-  socket.emit("lobby:create");
+  lobbyStatusEl.textContent = "Creating room…";
+  lobbyEmit("lobby:create");
 });
 
 btnJoin.addEventListener("click", () => {
   lobbyStatusEl.textContent = "Joining…";
-  socket.emit("lobby:join", { code: roomCodeInput.value });
+  lobbyEmit("lobby:join", { code: roomCodeInput.value });
 });
 
 btnCancelQueue.addEventListener("click", () => {
@@ -1201,14 +1209,27 @@ btnLeaveGame?.addEventListener("click", () => {
   lobbyStatusEl.textContent = "Left the match — pick Quick Match or a room code.";
 });
 
+// Initial connection timeout hint
+setTimeout(() => {
+  if (!socket.connected) lobbyStatusEl.textContent = "Still connecting… is the server running?";
+}, 3000);
+
 socket.on("connect", () => {
   lobbyStatusEl.textContent = "Connected — pick Quick Match or enter a code.";
   statusEl.textContent = "Connected";
+  btnCancelQueue.classList.add("hidden");
+  hostCodeEl.classList.add("hidden");
 });
 
-socket.on("disconnect", () => {
+socket.on("disconnect", (reason) => {
   exitMatchUi({ disconnected: true });
-  lobbyStatusEl.textContent = "Disconnected from server. Refresh to retry.";
+  lobbyStatusEl.textContent = reason === "io server disconnect"
+    ? "Server closed the connection."
+    : "Disconnected from server. Refresh to retry.";
+});
+
+socket.on("connect_error", () => {
+  lobbyStatusEl.textContent = "Connection failed — check that the server is running on port 3000.";
 });
 
 socket.on("lobby_ready", () => {
